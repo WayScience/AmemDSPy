@@ -81,22 +81,21 @@ class AgenticMemorySystem:
         
         return note.id
     
-    def _build_metadata(self, note: MemoryNote) -> Dict[str, Any]:
-        """Build metadata dictionary from a MemoryNote.
+    def _serialize_metadata(self, note: MemoryNote) -> Dict[str, Any]:
+        """
+        Build serialized metadata dictionary from a MemoryNote.
+        Such that it can be stored in ChromaDB.
         
         :param note: MemoryNote instance
         :return: Metadata dictionary for ChromaDB
         """
+
+        metadata_dump = note.model_dump()               
+
         return {
-            "id": note.id,
-            "content": note.content,
-            "keywords": note.keywords,
-            "retrieval_count": note.retrieval_count,
-            "timestamp": note.timestamp,
-            "last_accessed": note.last_accessed,
-            "context": note.context,
-            "category": note.category,
-            "tags": note.tags
+            key: json.dumps(value) \
+                if isinstance(value, (dict, list)) else value
+            for key, value in metadata_dump.items()
         }
     
     def read(self, memory_id: str) -> Optional[MemoryNote]:
