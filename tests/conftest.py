@@ -4,6 +4,8 @@ import shutil
 from pathlib import Path
 
 from agentic_memory.retrievers import ChromaRetriever, PersistentChromaRetriever
+from agentic_memory.memory_system import AgenticMemorySystem
+from agentic_memory.memory_note import MemoryNote
 
 
 @pytest.fixture
@@ -45,3 +47,48 @@ def existing_collection(temp_db_dir, sample_metadata):
     )
     retriever.add_document("Existing document", sample_metadata, "existing_doc")
     return temp_db_dir, "existing_collection"
+
+
+@pytest.fixture
+def memory_system(retriever):
+    """Fixture providing a clean AgenticMemorySystem instance."""
+    system = AgenticMemorySystem(retriever=retriever)
+    yield system
+    # Cleanup handled by retriever fixture
+
+
+@pytest.fixture
+def sample_memory_note():
+    """Fixture providing a sample MemoryNote instance."""
+    return MemoryNote(
+        content="This is a test memory about machine learning",
+        keywords=["machine learning", "AI", "test"],
+        context="Testing",
+        category="Technical",
+        tags=["test", "ml"]
+    )
+
+
+@pytest.fixture
+def populated_memory_system(memory_system):
+    """Fixture providing a memory system with pre-populated data."""
+    # Add several test memories
+    memory_system.add_note(
+        content="Python is a programming language",
+        keywords=["python", "programming"],
+        context="Programming",
+        tags=["language", "coding"]
+    )
+    memory_system.add_note(
+        content="Machine learning is a subset of AI",
+        keywords=["machine learning", "AI"],
+        context="Technology",
+        tags=["ml", "ai"]
+    )
+    memory_system.add_note(
+        content="ChromaDB is a vector database",
+        keywords=["chromadb", "database", "vector"],
+        context="Technology",
+        tags=["database", "vector"]
+    )
+    return memory_system
