@@ -1,25 +1,15 @@
-import keyword
-from typing import List, Dict, Optional, Any, Tuple
-import uuid
-from datetime import datetime
-from .llm_controller import LLMController
-from .retrievers import ChromaRetriever
 import json
 import logging
-from rank_bm25 import BM25Okapi
-from sentence_transformers import SentenceTransformer
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
-import os
-from abc import ABC, abstractmethod
-from transformers import AutoModel, AutoTokenizer
-from nltk.tokenize import word_tokenize
-import pickle
-from pathlib import Path
-from litellm import completion
-import time
+import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+
+
+from .llm_controller import LLMController
+from .retrievers import ChromaRetriever
 
 logger = logging.getLogger(__name__)
+
 
 class MemoryNote:
     """A memory note that represents a single unit of information in the memory system.
@@ -257,7 +247,7 @@ class AgenticMemorySystem:
         }
         self.retriever.add_document(note.content, metadata, note.id)
         
-        if evo_label == True:
+        if evo_label:
             self.evo_cnt += 1
             if self.evo_cnt % self.evo_threshold == 0:
                 self.consolidate_memories()
