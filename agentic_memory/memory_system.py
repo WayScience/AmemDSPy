@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -76,7 +77,7 @@ class AgenticMemorySystem:
         self.memories[note.id] = note
         
         # Add to ChromaDB with complete metadata
-        metadata = self._build_metadata(note)
+        metadata = self._serialize_metadata(note)
         self.retriever.add_document(note.content, metadata, note.id)
         
         return note.id
@@ -156,8 +157,13 @@ class AgenticMemorySystem:
             if hasattr(note, key):
                 setattr(note, key, value)
         
-        self.retriever.collection.update(
-            ids=[memory_id], 
-            documents=[note.content], 
-            metadatas=[self._build_metadata(note)]
-        )
+        try:
+            self.retriever.collection.update(
+                ids=[memory_id], 
+                documents=[note.content], 
+                metadatas=[self._serialize_metadata(note)]
+            )
+        except Exception:
+            return False
+        
+        return True
