@@ -92,3 +92,34 @@ def populated_memory_system(memory_system):
         tags=["database", "vector"]
     )
     return memory_system
+
+
+@pytest.fixture
+def keyword_filterable_memory_system(memory_system):
+    """
+    Fixture providing a memory system with notes that have extras, 
+        for testing filtering.
+    """
+    # Add notes with extras for keyword filtering tests
+    ids = {}
+    
+    ids['project_a'] = memory_system.add_note(
+        content="Python programming",
+        project="project_a"
+    )
+    ids['project_b'] = memory_system.add_note(
+        content="Python tutorial",
+        project="project_b"
+    )
+    ids['ml_alice'] = memory_system.add_note(
+        content="Machine learning",
+        project="ml_project",
+        author="alice"
+    )
+    ids['ml_bob'] = memory_system.add_note(
+        content="Deep learning",
+        project="ml_project",
+        author="bob"
+    )
+    
+    return memory_system, ids

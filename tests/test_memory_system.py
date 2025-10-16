@@ -51,6 +51,36 @@ class TestMemoryNote:
         assert note.context == "Custom Context"
         assert note.category == "Custom Category"
         assert note.tags == ["tag1", "tag2"]
+    
+    def test_memory_note_with_extras(self):
+        """Test that MemoryNote absorbs unknown kwargs into extras."""
+        note = MemoryNote(
+            content="Test content",
+            custom_field1="value1",
+            custom_field2="value2"
+        )
+        
+        assert note.content == "Test content"
+        assert note.extras == {"custom_field1": "value1", "custom_field2": "value2"}
+    
+    def test_memory_note_with_explicit_extras(self):
+        """Test that explicit extras dict is preserved."""
+        note = MemoryNote(
+            content="Test content",
+            extras={"existing": "value"}
+        )
+        
+        assert note.extras == {"existing": "value"}
+    
+    def test_memory_note_merges_extras(self):
+        """Test that unknown kwargs are merged with explicit extras."""
+        note = MemoryNote(
+            content="Test content",
+            extras={"existing": "value"},
+            new_field="new_value"
+        )
+        
+        assert note.extras == {"existing": "value", "new_field": "new_value"}
 
 
 class TestAgenticMemorySystemInit:
@@ -137,6 +167,17 @@ class TestAgenticMemorySystemCRUD:
             content="New content"
         )
         assert success is False
+    
+    def test_add_note_with_extras(self, memory_system):
+        """Test adding a note with extra fields."""
+        note_id = memory_system.add_note(
+            content="Test content",
+            project="project_x",
+            author="john_doe"
+        )
+        
+        note = memory_system.memories[note_id]
+        assert note.extras == {"project": "project_x", "author": "john_doe"}
 
 
 class TestAgenticMemorySystemSearch:
@@ -169,6 +210,57 @@ class TestAgenticMemorySystemSearch:
         """Test that search respects the k parameter."""
         results = populated_memory_system.search("technology", k=2)
         assert len(results) <= 2
+    
+    def test_search_with_keyword_filter(self, keyword_filterable_memory_system):
+        """
+        Test search with keyword filtering.
+        Ensures note matching the filter appears in results
+            before notes that do not match.
+        """
+        memory_system, ids = keyword_filterable_memory_system
+        
+        # Search with filter
+        results = memory_system.search("python", project="project_a")
+        
+        assert len(results) >= 1
+
+        # If project_b exists in results, it should come after project_a
+        id1_index = next(
+            (i for i, r in enumerate(results) \
+             if r['id'] == ids['project_a']), None)
+        id2_index = next(
+            (i for i, r in enumerate(results) \
+             if r['id'] == ids['project_b']), None)
+        
+        if id2_index is not None:
+            assert id1_index is not None
+            assert id1_index < id2_index
+    
+    def test_search_with_multiple_keyword_filters(self, keyword_filterable_memory_system):
+        """Test search with multiple keyword filters."""
+        memory_system, ids = keyword_filterable_memory_system
+        
+        # Filter by both project and author
+        results = memory_system.search(
+            "learning",
+            project="ml_project",
+            author="alice"
+        )
+        
+        assert len(results) >= 1
+        assert any(r['id'] == ids['ml_alice'] for r in results)
+        
+        # If ml_bob exists in results, it should come after ml_alice
+        id1_index = next(
+            (i for i, r in enumerate(results) \
+             if r['id'] == ids['ml_alice']), None)
+        id2_index = next(
+            (i for i, r in enumerate(results) \
+             if r['id'] == ids['ml_bob']), None)
+        
+        if id2_index is not None:
+            assert id1_index is not None
+            assert id1_index < id2_index
 
 
 class TestAgenticMemorySystemHelpers:
