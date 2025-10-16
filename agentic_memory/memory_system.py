@@ -112,11 +112,8 @@ class AgenticMemorySystem:
         
         :return: The unique ID of the created memory note
         """
-        # Create MemoryNote
-        note = MemoryNote(
-            content=content,
-            **kwargs
-        )
+        # Create MemoryNote (it will automatically handle extras)
+        note = MemoryNote(content=content, **kwargs)
         
         # Store in local dictionary
         self.memories[note.id] = note
@@ -180,29 +177,79 @@ class AgenticMemorySystem:
             memory.retrieval_count += 1
         return memory
 
+    def _filter_by_keywords(
+        self,
+        filter_keywords: Dict[str, str]
+    ) -> List[str]:
+        """
+        Filter memories that strictly match all provided keyword-value pairs.
+        
+        :param filter_keywords: Dict of key-value pairs to filter by
+        :return: List of memory IDs that match all filters
+        """
+        matching_ids = []
+        
+        for memory_id, note in self.memories.items():
+            # Check if all filter keywords match
+            if all(
+                note.extras.get(key) == value 
+                for key, value in filter_keywords.items()
+            ):
+                matching_ids.append(memory_id)
+        
+        return matching_ids
+    
     def search(
         self,
         query: str,
         k: int = 5,
+        _threshold: float = 0.7,
+        **kwargs
     ) -> List[Dict[str, Any]]:
         """
         Perform a semantic search for memory notes similar to the query.
+        Optionally filter by exact keyword matches first.
 
         :param query: The search query string
         :param k: Number of top results to return
+        :param _threshold: Similarity threshold
+        :param kwargs: Optional dict of key-value pairs to filter by
         """
+    
+        kwargs = {
+            k: v for k, v in kwargs.items() if isinstance(v, str)
+        }
+        results_list = []        
+
+        # precise match search by keyword value pairs 
+        if kwargs:
+            keyword_matched_ids = self._filter_by_keywords(kwargs)
+            results_list.extend([
+                self.memories[id].model_dump()
+                for id in keyword_matched_ids
+            ])
         
+        # semantic search
         results = self.retriever.search(query, k)
         
-        if not results or not results.get('ids'):
-            return []
+        if results and results.get('ids'):
+            # Get IDs already included from keyword filtering
+            existing_ids = {r['id'] for r in results_list}
+            
+            # Add semantic search results that aren't already included
+            for id, content, distance in zip(
+                results['ids'][0], 
+                results['documents'][0],
+                results['distances'][0]
+            ):
+                if id not in existing_ids and distance <= _threshold:
+                    if id in self.memories:
+                        results_list.append(self.memories[id].model_dump())
+                    else:
+                        results_list.append({"id": id, "content": content})
 
-        return [
-            self.memories.get(id).model_dump() \
-                if id in self.memories else {"id": id, "content": content}
-            for id, content in zip(results['ids'][0], results['documents'][0])
-        ]
-    
+        return results_list[:k]
+
     def update(
         self, 
         memory_id: str, 

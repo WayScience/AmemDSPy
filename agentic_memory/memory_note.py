@@ -1,7 +1,7 @@
 import uuid
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Dict
 
 def now_ymdhm() -> str:
     return datetime.now().strftime("%Y%m%d%H%M")
@@ -10,7 +10,10 @@ def now_ymdhm() -> str:
 class MemoryNote(BaseModel):
     """
     A memory note that represents a single unit of information
-    in the memory system.
+        in the memory system.
+    Absorbs any unknown fields into the `extras` dictionary, intended
+        for arbitrary keyword-value metadata that can be used for filtering
+        searches later. 
     """
 
     content: str = Field(
@@ -37,3 +40,26 @@ class MemoryNote(BaseModel):
     category: str = Field(
         "Uncategorized", description="Classification category")
     tags: List[str] = Field(default_factory=list, description="Additional info")
+    extras: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Arbitrary key-value pairs for additional metadata")
+
+    def __init__(self, **data):
+        """Custom init to automatically absorb unknown kwargs into extras."""
+    
+        # Class-level constant for known fields
+        known_fields = list(self.__class__.model_fields.keys())
+        known_fields.remove('extras')
+        
+        known_data = {}
+        extras = data.pop('extras', {}).copy()
+        
+        for key, value in list(data.items()):
+            if key in known_fields:
+                known_data[key] = value
+            else:
+                # Move unknown fields to extras
+                extras[key] = str(value)
+        
+        known_data['extras'] = extras
+        super().__init__(**known_data)
