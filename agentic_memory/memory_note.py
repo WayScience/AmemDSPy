@@ -18,6 +18,8 @@ class MemoryNote(BaseModel):
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()), 
         description="Unique identifier for the memory")
+    # TODO: Placeholder for future LM backed optimization of memory
+    # currently the LM optimization is removed. 
     keywords: List[str] = Field(
         default_factory=list, 
         description="Key terms extracted from the content")
@@ -29,6 +31,7 @@ class MemoryNote(BaseModel):
     last_accessed: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="Last access timestamp (UTC)")
+    # TODO: Another placeholder for future context-aware memory management
     context: str = Field(
         "General", description="The broader context or domain of the memory")
     category: str = Field(
