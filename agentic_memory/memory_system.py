@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from .retrievers import ChromaRetriever
@@ -49,6 +49,55 @@ class AgenticMemorySystem:
         
         # for future LLM integration
         self._llm_processor = None
+        
+        # Load existing memories from the retriever
+        self._load_existing_memories()
+
+    def _load_existing_memories(self):
+        """
+        Load all existing memories from the retriever into self.memories.
+        Called during initialization to sync in-memory state with ChromaDB.
+        """
+        try:
+            # Get all documents from the collection
+            all_data = self.retriever.collection.get(
+                include=["metadatas", "documents"]
+            )
+            
+            if not all_data or not all_data.get('ids'):
+                return
+            
+            # Convert metadata types
+            if all_data.get("metadatas"):
+                all_data["metadatas"] = self.retriever._convert_metadata_types(
+                    [all_data["metadatas"]]
+                )[0]
+            
+            # Reconstruct MemoryNote objects
+            for doc_id, content, metadata in zip(
+                all_data['ids'], 
+                all_data['documents'], 
+                all_data['metadatas']
+            ):
+                # Ensure content is in metadata
+                if 'content' not in metadata:
+                    metadata['content'] = content
+                if 'id' not in metadata:
+                    metadata['id'] = doc_id
+                    
+                note = self._deserialize_metadata(metadata)
+                self.memories[doc_id] = note
+                
+        except AttributeError:
+            # Collection may not exist yet - this is fine for new systems
+            pass
+        except Exception as e:
+            # For unexpected errors, warn but don't crash
+            import warnings
+            warnings.warn(
+                f"Failed to load existing memories from retriever: {e}",
+                RuntimeWarning
+            )
 
     def add_note(
         self, 
@@ -59,7 +108,7 @@ class AgenticMemorySystem:
         
         :param kwargs: Additional metadata fields
         :param content: The main text content of the memory
-        :param timestamp: Creation time in format YYYYMMDDHHMM
+        :param timestamp: Creation time in datetime format
         :param keywords: Key terms extracted from the content
         :param context: The broader context or domain of the memory
         :param category: Classification category
@@ -94,10 +143,33 @@ class AgenticMemorySystem:
         metadata_dump = note.model_dump()               
 
         return {
-            key: json.dumps(value) \
-                if isinstance(value, (dict, list)) else value
+            key: (
+                value.isoformat() if isinstance(value, datetime) 
+                else json.dumps(value) if isinstance(value, (dict, list))
+                else value
+            )
             for key, value in metadata_dump.items()
         }
+    
+    def _deserialize_metadata(self, metadata: Dict[str, Any]) -> MemoryNote:
+        """
+        Reconstruct a MemoryNote from deserialized metadata.
+        
+        :param metadata: Metadata dictionary from ChromaDB (already type-converted)
+        :return: MemoryNote instance
+        """
+        # Remove 'id' from metadata to avoid duplication since it's a separate field
+        note_data = metadata.copy()
+        
+        # Convert any remaining JSON strings if needed
+        for key, value in note_data.items():
+            if isinstance(value, str) and key in ('keywords', 'tags'):
+                try:
+                    note_data[key] = json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        
+        return MemoryNote(**note_data)
     
     def read(self, memory_id: str) -> Optional[MemoryNote]:
         """Retrieve a memory note by its ID.
@@ -108,7 +180,7 @@ class AgenticMemorySystem:
         memory = self.memories.get(memory_id)
         if memory:
             # Update access tracking
-            memory.last_accessed = datetime.now().strftime("%Y%m%d%H%M")
+            memory.last_accessed = datetime.now(timezone.utc)
             memory.retrieval_count += 1
         return memory
 
