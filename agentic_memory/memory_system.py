@@ -192,8 +192,12 @@ class AgenticMemorySystem:
         for memory_id, note in self.memories.items():
             # Check if all filter keywords match
             if all(
+                # ensure match
                 note.extras.get(key) == value 
                 for key, value in filter_keywords.items()
+            ) and all(
+                # ensure no extra keys in note.extras
+                key in filter_keywords for key in note.extras.keys()
             ):
                 matching_ids.append(memory_id)
         
@@ -281,4 +285,31 @@ class AgenticMemorySystem:
         except Exception:
             return False
         
+        return True
+    
+    def update_by_keywords(
+        self,
+        content: str,
+        **kwargs
+    ) -> bool:
+        """
+        Update memory notes that match all provided keyword-value pairs.
+
+        :param content: New content for the memory notes
+        :param kwargs: Key-value pairs to filter memories by
+        :return: True if at least one memory was updated, else False
+        """
+        if not kwargs:
+            return False
+        
+        matching_ids = self._filter_by_keywords(kwargs)
+        if not matching_ids:
+            self.add_note(
+                content=content,
+                **kwargs                
+            )
+        else:
+            matching_id = matching_ids[0]
+            self.update(matching_id, content=content)
+    
         return True

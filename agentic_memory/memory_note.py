@@ -1,7 +1,10 @@
 import uuid
-from pydantic import BaseModel, Field
+
 from datetime import datetime, timezone
 from typing import List, Dict
+
+from pydantic import BaseModel, Field
+
 
 def now_ymdhm() -> str:
     return datetime.now().strftime("%Y%m%d%H%M")
@@ -40,6 +43,12 @@ class MemoryNote(BaseModel):
     category: str = Field(
         "Uncategorized", description="Classification category")
     tags: List[str] = Field(default_factory=list, description="Additional info")
+    memory_update_history: List[str] = Field(
+        default_factory=list, 
+        description="History of updates made to this memory")
+    memory_update_context: List[str] = Field(
+        default_factory=list, 
+        description="Contextual notes about updates made")
     extras: Dict[str, str] = Field(
         default_factory=dict,
         description="Arbitrary key-value pairs for additional metadata")
