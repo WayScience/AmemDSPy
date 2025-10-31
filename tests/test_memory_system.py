@@ -1,5 +1,6 @@
 import pytest
 import json
+from datetime import datetime, timezone
 
 from agentic_memory.memory_note import MemoryNote
 from agentic_memory.memory_system import AgenticMemorySystem
@@ -26,13 +27,16 @@ class TestMemoryNote:
     
     def test_memory_note_creation_with_all_fields(self):
         """Test creating a MemoryNote with all parameters."""
+        custom_timestamp = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
+        custom_last_accessed = datetime(2024, 1, 1, 1, 0, tzinfo=timezone.utc)
+        
         note = MemoryNote(
             content="Full content",
             id="custom-id",
             keywords=["key1", "key2"],
             retrieval_count=5,
-            timestamp="202401010000",
-            last_accessed="202401010100",
+            timestamp=custom_timestamp,
+            last_accessed=custom_last_accessed,
             context="Custom Context",
             category="Custom Category",
             tags=["tag1", "tag2"]
@@ -42,8 +46,8 @@ class TestMemoryNote:
         assert note.id == "custom-id"
         assert note.keywords == ["key1", "key2"]
         assert note.retrieval_count == 5
-        assert note.timestamp == "202401010000"
-        assert note.last_accessed == "202401010100"
+        assert note.timestamp == custom_timestamp
+        assert note.last_accessed == custom_last_accessed
         assert note.context == "Custom Context"
         assert note.category == "Custom Category"
         assert note.tags == ["tag1", "tag2"]
@@ -52,16 +56,13 @@ class TestMemoryNote:
 class TestAgenticMemorySystemInit:
     """Test suite for AgenticMemorySystem initialization."""
     
-    def test_init_with_default_retriever(self):
+    def test_init_with_default_retriever(self, retriever):
         """Test initialization with default retriever."""
-        system = AgenticMemorySystem(collection_name="test_init")
+        system = AgenticMemorySystem(retriever=retriever)
         
         assert system.memories == {}
         assert isinstance(system.retriever, ChromaRetriever)
         assert system._llm_processor is None
-        
-        # Cleanup
-        system.retriever.client.reset()
     
     def test_init_with_invalid_retriever(self):
         """Test that invalid retriever raises TypeError."""
@@ -99,7 +100,7 @@ class TestAgenticMemorySystemCRUD:
     
     def test_add_note_custom_timestamp(self, memory_system):
         """Test adding a note with custom timestamp."""
-        custom_time = "202401010000"
+        custom_time = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
         note_id = memory_system.add_note(
             content="Timestamped content",
             timestamp=custom_time
@@ -184,6 +185,10 @@ class TestAgenticMemorySystemHelpers:
             assert key in metadata
             if ref_value is None:
                 assert metadata[key] is None
+            elif isinstance(ref_value, datetime):
+                # Datetime objects should be serialized to ISO format strings
+                assert metadata[key] == ref_value.isoformat()
+                assert isinstance(metadata[key], str)
             elif isinstance(ref_value, (dict, list)):
                 assert metadata[key] == json.dumps(ref_value)
                 assert json.loads(metadata[key]) == ref_value
