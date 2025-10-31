@@ -137,11 +137,21 @@ class ChromaRetriever:
             # only attempt to convert strings
             if not isinstance(value, str):
                 continue
-            else:
+            
+            # Try datetime conversion first (ISO format)
+            if key in ('timestamp', 'last_accessed'):
                 try:
-                    metadata[key] = ast.literal_eval(value)
-                except Exception:
+                    from datetime import datetime
+                    metadata[key] = datetime.fromisoformat(value)
+                    continue
+                except (ValueError, AttributeError):
                     pass
+            
+            # Try literal_eval for other types (lists, dicts, etc.)
+            try:
+                metadata[key] = ast.literal_eval(value)
+            except Exception:
+                pass
 
 
 class PersistentChromaRetriever(ChromaRetriever):
