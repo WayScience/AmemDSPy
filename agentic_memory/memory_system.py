@@ -106,12 +106,8 @@ class AgenticMemorySystem:
     ) -> str:
         """Add a new memory note to the system.
         
-        :param kwargs: Additional metadata fields
-        :param content: The main text content of the memory
-        :param timestamp: Creation time in datetime format
+        :param kwargs: Additional metadata fields, which can include:
         :param keywords: Key terms extracted from the content
-        :param context: The broader context or domain of the memory
-        :param category: Classification category
         :param tags: Additional classification tags
         
         :return: The unique ID of the created memory note
