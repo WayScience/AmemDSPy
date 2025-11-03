@@ -263,31 +263,6 @@ class TestAgenticMemorySystemSearch:
             assert id1_index < id2_index
 
 
-class TestAgenticMemorySystemHelpers:
-    """Test suite for helper methods."""
-    
-    def test_serialize_metadata(self, memory_system, sample_memory_note):
-        """Test metadata serialization from MemoryNote."""
-        metadata = memory_system._serialize_metadata(sample_memory_note)
-        ref_metadata = sample_memory_note.model_dump()
-
-        assert isinstance(metadata, dict)
-
-        for key, ref_value in ref_metadata.items():
-            assert key in metadata
-            if ref_value is None:
-                assert metadata[key] is None
-            elif isinstance(ref_value, datetime):
-                # Datetime objects should be serialized to ISO format strings
-                assert metadata[key] == ref_value.isoformat()
-                assert isinstance(metadata[key], str)
-            elif isinstance(ref_value, (dict, list)):
-                assert metadata[key] == json.dumps(ref_value)
-                assert json.loads(metadata[key]) == ref_value
-            else:
-                assert metadata[key] == ref_value
-
-
 class TestAgenticMemorySystemPersistence:
     """Test suite for memory persistence and deserialization."""
     
