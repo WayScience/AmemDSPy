@@ -28,7 +28,7 @@ class AgenticMemorySystem:
         :param reset_collection: If True, reset the collection on init
         :param kwargs: Additional args for ChromaRetriever
         """
-        self.memories = {}
+        self.memories: Dict[str, MemoryNote] = {}
         
         # Initialize ChromaDB retriever
         if retriever is None:
@@ -67,9 +67,9 @@ class AgenticMemorySystem:
             if not all_data or not all_data.get('ids'):
                 return
             
-            # Convert metadata types
+            # Deserialize metadata using field registry
             if all_data.get("metadatas"):
-                all_data["metadatas"] = self.retriever._convert_metadata_types(
+                all_data["metadatas"] = self.retriever._deserialize_metadatas(
                     [all_data["metadatas"]]
                 )[0]
             
@@ -85,7 +85,7 @@ class AgenticMemorySystem:
                 if 'id' not in metadata:
                     metadata['id'] = doc_id
                     
-                note = self._deserialize_metadata(metadata)
+                note = MemoryNote.deserialize_from_storage(metadata)
                 self.memories[doc_id] = note
                 
         except AttributeError:
@@ -118,51 +118,14 @@ class AgenticMemorySystem:
         # Store in local dictionary
         self.memories[note.id] = note
         
-        # Add to ChromaDB with complete metadata
-        metadata = self._serialize_metadata(note)
-        self.retriever.add_document(note.content, metadata, note.id)
+        # Add to ChromaDB with serialized metadata
+        self.retriever.add_document(
+            document=note.content, 
+            metadata=note.serialize_for_storage(), 
+            doc_id=note.id
+        )
         
         return note.id
-    
-    def _serialize_metadata(self, note: MemoryNote) -> Dict[str, Any]:
-        """
-        Build serialized metadata dictionary from a MemoryNote.
-        Such that it can be stored in ChromaDB.
-        
-        :param note: MemoryNote instance
-        :return: Metadata dictionary for ChromaDB
-        """
-
-        metadata_dump = note.model_dump()               
-
-        return {
-            key: (
-                value.isoformat() if isinstance(value, datetime) 
-                else json.dumps(value) if isinstance(value, (dict, list))
-                else value
-            )
-            for key, value in metadata_dump.items()
-        }
-    
-    def _deserialize_metadata(self, metadata: Dict[str, Any]) -> MemoryNote:
-        """
-        Reconstruct a MemoryNote from deserialized metadata.
-        
-        :param metadata: Metadata dictionary from ChromaDB (already type-converted)
-        :return: MemoryNote instance
-        """
-        # Remove 'id' from metadata to avoid duplication since it's a separate field
-        note_data = metadata.copy()
-        
-        # Convert any remaining JSON strings if needed
-        for key, value in note_data.items():
-            if isinstance(value, str) and key in ('keywords', 'tags'):
-                try:
-                    note_data[key] = json.loads(value)
-                except (json.JSONDecodeError, TypeError):
-                    pass
-        
-        return MemoryNote(**note_data)
     
     def read(self, memory_id: str) -> Optional[MemoryNote]:
         """Retrieve a memory note by its ID.
@@ -267,20 +230,24 @@ class AgenticMemorySystem:
         :param kwargs: Fields to update with new values
         """
         if memory_id not in self.memories:
-            return False
-        
-        note = self.memories[memory_id]
+            return False        
 
-        # Update fields
-        for key, value in kwargs.items():
-            if hasattr(note, key):
-                setattr(note, key, value)
+        # Update note fields
+        note = self.memories[memory_id]
+        try:
+            self.memories[memory_id].update(**kwargs)
+        except Exception:
+            return False
+        # for key, value in kwargs.items():
+        #     if hasattr(note, key):
+        #         setattr(note, key, value)
         
+        # Sync update to ChromaDB
         try:
             self.retriever.collection.update(
                 ids=[memory_id], 
                 documents=[note.content], 
-                metadatas=[self._serialize_metadata(note)]
+                metadatas=[note.serialize_for_storage()]
             )
         except Exception:
             return False
@@ -306,10 +273,13 @@ class AgenticMemorySystem:
         if not matching_ids:
             self.add_note(
                 content=content,
-                **kwargs                
+                **kwargs
             )
         else:
             matching_id = matching_ids[0]
-            self.update(matching_id, content=content)
+            self.update(
+                memory_id=matching_id, 
+                content=content
+            )
     
         return True
