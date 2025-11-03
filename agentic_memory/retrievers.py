@@ -10,6 +10,8 @@ from chromadb.config import Settings
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 from nltk.tokenize import word_tokenize
 
+from .field_handlers import FieldRegistry, memory_note_field_registry
+
 
 def simple_tokenize(text):
     return word_tokenize(text)
@@ -45,12 +47,15 @@ class ChromaRetriever:
     def __init__(
         self, 
         collection_name: str = "memories", 
-        model_name: str = "all-MiniLM-L6-v2"
+        model_name: str = "all-MiniLM-L6-v2",
+        field_registry: FieldRegistry = memory_note_field_registry
     ):
         """Initialize ChromaDB retriever.
 
-        Args:
-            collection_name: Name of the ChromaDB collection
+        :param collection_name: Name of the ChromaDB collection.
+        :param model_name: SentenceTransformer model name for embeddings.
+        :param field_registry: FieldRegistry instance for metadata handling.
+            Defaults to memory_note_field_registry.
         """
         self.client = chromadb.Client(Settings(allow_reset=True))
         self.embedding_function = SentenceTransformerEmbeddingFunction(
@@ -59,27 +64,22 @@ class ChromaRetriever:
         self.collection = self.client.get_or_create_collection(
             name=collection_name, embedding_function=self.embedding_function
         )
+        self.field_registry: FieldRegistry = field_registry
 
     def add_document(self, document: str, metadata: Dict, doc_id: str):
         """Add a document to ChromaDB.
 
-        Args:
-            document: Text content to add
-            metadata: Dictionary of metadata
-            doc_id: Unique identifier for the document
+        :param document: Text content of the document
+        :param metadata: Metadata dictionary for the document, must be already
+            serialized.
+        :param doc_id: Unique identifier for the document
         """
-        # Convert MemoryNote object to serializable format
-        processed_metadata = {}
-        for key, value in metadata.items():
-            if isinstance(value, list):
-                processed_metadata[key] = json.dumps(value)
-            elif isinstance(value, dict):
-                processed_metadata[key] = json.dumps(value)
-            else:
-                processed_metadata[key] = str(value)
 
+        # using memory_note_field_registry
         self.collection.add(
-            documents=[document], metadatas=[processed_metadata], ids=[doc_id]
+            documents=[document], 
+            metadatas=[metadata], 
+            ids=[doc_id]
         )
 
     def delete_document(self, doc_id: str):
@@ -103,55 +103,37 @@ class ChromaRetriever:
         results = self.collection.query(query_texts=[query], n_results=k)
         
         if (results is not None) and (results.get("metadatas", [])):
-            results["metadatas"] = self._convert_metadata_types(
+            # Use field registry for deserialization
+            results["metadatas"] = self._deserialize_metadatas(
                 results["metadatas"])
         
         return results
 
-    def _convert_metadata_types(
+    def _deserialize_metadatas(
         self, 
         metadatas: List[List[Dict]]
     ) -> List[List[Dict]]:
-        """Convert string metadata back to original types.
-        
-        Args:
-            metadatas: List of metadata lists from query results
-            
-        Returns:
-            Converted metadata structure
         """
+        Deserialize metadata using the field registry.
+        
+        :param metadatas: List of metadata dictionaries from ChromaDB
+        :return: List of deserialized metadata dictionaries
+        """
+        deserialized = []
         for query_metadatas in metadatas:
-            if isinstance(query_metadatas, List):
+            query_results = []
+            if isinstance(query_metadatas, list):
                 for metadata_dict in query_metadatas:
-                    if isinstance(metadata_dict, Dict):
-                        self._convert_metadata_dict(metadata_dict)
-        return metadatas
-
-    def _convert_metadata_dict(self, metadata: Dict) -> None:
-        """Convert metadata values from strings to appropriate types in-place.
-        
-        Args:
-            metadata: Single metadata dictionary to convert
-        """
-        for key, value in metadata.items():
-            # only attempt to convert strings
-            if not isinstance(value, str):
-                continue
-            
-            # Try datetime conversion first (ISO format)
-            if key in ('timestamp', 'last_accessed'):
-                try:
-                    from datetime import datetime
-                    metadata[key] = datetime.fromisoformat(value)
-                    continue
-                except (ValueError, AttributeError):
-                    pass
-            
-            # Try literal_eval for other types (lists, dicts, etc.)
-            try:
-                metadata[key] = ast.literal_eval(value)
-            except Exception:
-                pass
+                    if isinstance(metadata_dict, dict):
+                        deserialized_dict = self.field_registry.deserialize_all(
+                            metadata_dict)
+                        query_results.append(deserialized_dict)
+                    else:
+                        query_results.append({})
+            else:
+                query_results.append(query_metadatas)
+            deserialized.append(query_results)
+        return deserialized
 
 
 class PersistentChromaRetriever(ChromaRetriever):
@@ -167,6 +149,7 @@ class PersistentChromaRetriever(ChromaRetriever):
         directory: Optional[str] = None, 
         collection_name: str = "memories", 
         model_name: str = "all-MiniLM-L6-v2",
+        field_registry: FieldRegistry = memory_note_field_registry,
         extend: bool = False
     ):
         """
@@ -216,6 +199,8 @@ class PersistentChromaRetriever(ChromaRetriever):
             )
         self.collection_name = collection_name
 
+        self.field_registry: FieldRegistry = field_registry
+
 
 class CopiedChromaRetriever(PersistentChromaRetriever):
     """
@@ -229,6 +214,7 @@ class CopiedChromaRetriever(PersistentChromaRetriever):
         directory: Optional[str] = None, 
         collection_name: str = "memories", 
         model_name: str = "all-MiniLM-L6-v2",
+        field_registry: FieldRegistry = memory_note_field_registry,
         _dest_collection_name: Optional[str] = None,
         _copy_batch_size: int = 10,
     ):
@@ -297,6 +283,8 @@ class CopiedChromaRetriever(PersistentChromaRetriever):
             raise ValueError(f"Error cloning ChromaDB collection: {e}")
         
         atexit.register(self.close)
+
+        self.field_registry: FieldRegistry = field_registry
 
     def close(self):
         """Cleanup temporary directory."""

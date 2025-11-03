@@ -51,6 +51,36 @@ class TestMemoryNote:
         assert note.context == "Custom Context"
         assert note.category == "Custom Category"
         assert note.tags == ["tag1", "tag2"]
+    
+    def test_memory_note_with_extras(self):
+        """Test that MemoryNote absorbs unknown kwargs into extras."""
+        note = MemoryNote(
+            content="Test content",
+            custom_field1="value1",
+            custom_field2="value2"
+        )
+        
+        assert note.content == "Test content"
+        assert note.extras == {"custom_field1": "value1", "custom_field2": "value2"}
+    
+    def test_memory_note_with_explicit_extras(self):
+        """Test that explicit extras dict is preserved."""
+        note = MemoryNote(
+            content="Test content",
+            extras={"existing": "value"}
+        )
+        
+        assert note.extras == {"existing": "value"}
+    
+    def test_memory_note_merges_extras(self):
+        """Test that unknown kwargs are merged with explicit extras."""
+        note = MemoryNote(
+            content="Test content",
+            extras={"existing": "value"},
+            new_field="new_value"
+        )
+        
+        assert note.extras == {"existing": "value", "new_field": "new_value"}
 
 
 class TestAgenticMemorySystemInit:
@@ -137,6 +167,17 @@ class TestAgenticMemorySystemCRUD:
             content="New content"
         )
         assert success is False
+    
+    def test_add_note_with_extras(self, memory_system):
+        """Test adding a note with extra fields."""
+        note_id = memory_system.add_note(
+            content="Test content",
+            project="project_x",
+            author="john_doe"
+        )
+        
+        note = memory_system.memories[note_id]
+        assert note.extras == {"project": "project_x", "author": "john_doe"}
 
 
 class TestAgenticMemorySystemSearch:
@@ -169,31 +210,6 @@ class TestAgenticMemorySystemSearch:
         """Test that search respects the k parameter."""
         results = populated_memory_system.search("technology", k=2)
         assert len(results) <= 2
-
-
-class TestAgenticMemorySystemHelpers:
-    """Test suite for helper methods."""
-    
-    def test_serialize_metadata(self, memory_system, sample_memory_note):
-        """Test metadata serialization from MemoryNote."""
-        metadata = memory_system._serialize_metadata(sample_memory_note)
-        ref_metadata = sample_memory_note.model_dump()
-
-        assert isinstance(metadata, dict)
-
-        for key, ref_value in ref_metadata.items():
-            assert key in metadata
-            if ref_value is None:
-                assert metadata[key] is None
-            elif isinstance(ref_value, datetime):
-                # Datetime objects should be serialized to ISO format strings
-                assert metadata[key] == ref_value.isoformat()
-                assert isinstance(metadata[key], str)
-            elif isinstance(ref_value, (dict, list)):
-                assert metadata[key] == json.dumps(ref_value)
-                assert json.loads(metadata[key]) == ref_value
-            else:
-                assert metadata[key] == ref_value
 
 
 class TestAgenticMemorySystemPersistence:
