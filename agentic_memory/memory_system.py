@@ -238,9 +238,6 @@ class AgenticMemorySystem:
             self.memories[memory_id].update(**kwargs)
         except Exception:
             return False
-        # for key, value in kwargs.items():
-        #     if hasattr(note, key):
-        #         setattr(note, key, value)
         
         # Sync update to ChromaDB
         try:
