@@ -194,3 +194,257 @@ class TestAgenticMemorySystemHelpers:
                 assert json.loads(metadata[key]) == ref_value
             else:
                 assert metadata[key] == ref_value
+
+
+class TestAgenticMemorySystemPersistence:
+    """Test suite for memory persistence and deserialization."""
+    
+    def test_load_existing_memories_on_init(self, retriever):
+        """Test that existing memories are loaded on initialization."""
+        # Create first system and add memories
+        system1 = AgenticMemorySystem(retriever=retriever)
+        note_id1 = system1.add_note(
+            content="First memory",
+            keywords=["test", "persistence"],
+            tags=["tag1", "tag2"]
+        )
+        note_id2 = system1.add_note(
+            content="Second memory",
+            keywords=["test2"],
+            tags=["tag3"]
+        )
+        
+        # Create second system with same retriever - should load existing
+        system2 = AgenticMemorySystem(retriever=retriever)
+        
+        # Verify memories were loaded
+        assert len(system2.memories) == 2
+        assert note_id1 in system2.memories
+        assert note_id2 in system2.memories
+        assert system2.memories[note_id1].content == "First memory"
+        assert system2.memories[note_id2].content == "Second memory"
+    
+    def test_datetime_deserialization(self, retriever):
+        """Test that datetime fields are properly deserialized."""
+        # Add note with custom datetime
+        custom_timestamp = datetime(2024, 6, 15, 10, 30, 0, tzinfo=timezone.utc)
+        system1 = AgenticMemorySystem(retriever=retriever)
+        note_id = system1.add_note(
+            content="Timestamped memory",
+            timestamp=custom_timestamp
+        )
+        
+        # Create new system - load from retriever
+        system2 = AgenticMemorySystem(retriever=retriever)
+        loaded_note = system2.memories[note_id]
+        
+        # Verify datetime fields are datetime objects
+        assert isinstance(loaded_note.timestamp, datetime)
+        assert isinstance(loaded_note.last_accessed, datetime)
+        
+        # Verify timestamp value is preserved
+        assert loaded_note.timestamp == custom_timestamp
+    
+    def test_list_field_deserialization(self, retriever):
+        """Test that list fields (keywords, tags) are properly deserialized."""
+        system1 = AgenticMemorySystem(retriever=retriever)
+        keywords = ["machine learning", "AI", "neural networks"]
+        tags = ["ml", "research", "deep-learning"]
+        
+        note_id = system1.add_note(
+            content="ML research note",
+            keywords=keywords,
+            tags=tags
+        )
+        
+        # Load from retriever
+        system2 = AgenticMemorySystem(retriever=retriever)
+        loaded_note = system2.memories[note_id]
+        
+        # Verify lists are properly deserialized
+        assert isinstance(loaded_note.keywords, list)
+        assert isinstance(loaded_note.tags, list)
+        assert loaded_note.keywords == keywords
+        assert loaded_note.tags == tags
+    
+    def test_all_fields_preserved(self, retriever):
+        """Test that all MemoryNote fields are preserved through serialization."""
+        system1 = AgenticMemorySystem(retriever=retriever)
+        
+        # Create note with all fields specified
+        custom_timestamp = datetime(2024, 3, 1, 12, 0, 0, tzinfo=timezone.utc)
+        note_id = system1.add_note(
+            content="Complete memory note",
+            keywords=["key1", "key2", "key3"],
+            context="TestContext",
+            category="TestCategory",
+            tags=["tag1", "tag2"],
+            timestamp=custom_timestamp
+        )
+        
+        original_note = system1.memories[note_id]
+        
+        # Load from retriever
+        system2 = AgenticMemorySystem(retriever=retriever)
+        loaded_note = system2.memories[note_id]
+        
+        # Verify all fields match
+        assert loaded_note.id == original_note.id
+        assert loaded_note.content == original_note.content
+        assert loaded_note.keywords == original_note.keywords
+        assert loaded_note.context == original_note.context
+        assert loaded_note.category == original_note.category
+        assert loaded_note.tags == original_note.tags
+        assert loaded_note.timestamp == original_note.timestamp
+        assert loaded_note.retrieval_count == original_note.retrieval_count
+        
+        # Verify types
+        assert isinstance(loaded_note, MemoryNote)
+        assert isinstance(loaded_note.timestamp, datetime)
+        assert isinstance(loaded_note.last_accessed, datetime)
+        assert isinstance(loaded_note.keywords, list)
+        assert isinstance(loaded_note.tags, list)
+    
+    def test_empty_collection_loads_gracefully(self, retriever):
+        """Test that loading from empty collection doesn't crash."""
+        # Create system with empty retriever
+        system = AgenticMemorySystem(retriever=retriever)
+        
+        # Should have no memories
+        assert len(system.memories) == 0
+        assert system.memories == {}
+    
+    @pytest.mark.parametrize("notes_data,expected_count", [
+        # Single note with minimal fields
+        (
+            [{"content": "Single note"}],
+            1
+        ),
+        # Multiple notes with various field combinations
+        (
+            [
+                {
+                    "content": "Python programming",
+                    "keywords": ["python", "code"],
+                    "tags": ["programming"],
+                    "category": "Tech"
+                },
+                {
+                    "content": "Machine learning basics",
+                    "keywords": ["ml", "ai", "data"],
+                    "tags": ["ml", "education"],
+                    "context": "Learning"
+                },
+                {
+                    "content": "Database design",
+                    "keywords": ["database", "sql", "design"],
+                    "tags": ["backend"],
+                    "category": "Engineering"
+                }
+            ],
+            3
+        ),
+        # Notes with datetime fields
+        (
+            [
+                {
+                    "content": "Historical event",
+                    "timestamp": datetime(
+                        2023, 1, 15, 10, 30, 0, tzinfo=timezone.utc),
+                    "keywords": ["history"],
+                    "tags": ["event"]
+                },
+                {
+                    "content": "Future reminder",
+                    "timestamp": datetime(
+                        2025, 12, 31, 23, 59, 59, tzinfo=timezone.utc),
+                    "last_accessed": datetime(
+                        2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+                    "keywords": ["reminder", "future"]
+                }
+            ],
+            2
+        ),
+        # Empty lists and mix of specified/unspecified fields
+        (
+            [
+                {
+                    "content": "Minimal note with empty lists",
+                    "keywords": [],
+                    "tags": []
+                },
+                {
+                    "content": "Only content and context",
+                    "context": "SpecialContext"
+                },
+                {
+                    "content": "Full featured note",
+                    "keywords": ["k1", "k2", "k3"],
+                    "tags": ["t1", "t2"],
+                    "context": "FullContext",
+                    "category": "FullCategory"
+                }
+            ],
+            3
+        ),
+        # Larger number of notes
+        (
+            [{"content": f"Note number {i}", 
+              "keywords": [f"key{i}"], 
+              "tags": [f"tag{i}"]} 
+             for i in range(10)],
+            10
+        )
+    ])
+    def test_multiple_notes_roundtrip(self, retriever, notes_data, expected_count):
+        """
+        Test multiple notes survive serialization roundtrip with various configurations.
+        """
+        system1 = AgenticMemorySystem(retriever=retriever)
+        
+        # Add notes
+        note_ids = [system1.add_note(**data) for data in notes_data]
+        
+        # Load in new system
+        system2 = AgenticMemorySystem(retriever=retriever)
+        
+        # Verify correct number of notes loaded
+        assert len(system2.memories) == expected_count
+        assert len(system2.memories) == len(notes_data)
+        
+        # Verify each note
+        for note_id, expected_data in zip(note_ids, notes_data):
+            loaded_note = system2.memories[note_id]
+            
+            # Check all specified fields match
+            for field, expected_value in expected_data.items():
+                actual_value = getattr(loaded_note, field)
+                assert actual_value == expected_value, \
+                    (
+                        f"Field '{field}' mismatch: expected "
+                        f"{expected_value}, got {actual_value}"
+                    )
+            
+            # Verify default values for unspecified fields
+            if "keywords" not in expected_data:
+                assert loaded_note.keywords == []
+            if "tags" not in expected_data:
+                assert loaded_note.tags == []
+            if "context" not in expected_data:
+                assert loaded_note.context == "General"
+            if "category" not in expected_data:
+                assert loaded_note.category == "Uncategorized"
+            if "retrieval_count" not in expected_data:
+                assert loaded_note.retrieval_count == 0
+            
+            # Verify critical types are correct
+            assert isinstance(loaded_note, MemoryNote)
+            assert isinstance(loaded_note.timestamp, datetime)
+            assert isinstance(loaded_note.last_accessed, datetime)
+            assert isinstance(loaded_note.keywords, list)
+            assert isinstance(loaded_note.tags, list)
+            assert isinstance(loaded_note.id, str)
+            assert isinstance(loaded_note.content, str)
+            assert isinstance(loaded_note.context, str)
+            assert isinstance(loaded_note.category, str)
+            assert isinstance(loaded_note.retrieval_count, int)
