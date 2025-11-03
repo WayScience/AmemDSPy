@@ -139,62 +139,22 @@ class AgenticMemorySystem:
             memory.last_accessed = datetime.now(timezone.utc)
             memory.retrieval_count += 1
         return memory
-
-    def _filter_by_keywords(
-        self,
-        filter_keywords: Dict[str, str]
-    ) -> List[str]:
-        """
-        Filter memories that strictly match all provided keyword-value pairs.
-        
-        :param filter_keywords: Dict of key-value pairs to filter by
-        :return: List of memory IDs that match all filters
-        """
-        matching_ids = []
-        
-        for memory_id, note in self.memories.items():
-            # Check if all filter keywords match
-            if all(
-                # ensure match
-                note.extras.get(key) == value 
-                for key, value in filter_keywords.items()
-            ) and all(
-                # ensure no extra keys in note.extras
-                key in filter_keywords for key in note.extras.keys()
-            ):
-                matching_ids.append(memory_id)
-        
-        return matching_ids
     
     def search(
         self,
         query: str,
         k: int = 5,
         _threshold: float = 0.7,
-        **kwargs
     ) -> List[Dict[str, Any]]:
         """
         Perform a semantic search for memory notes similar to the query.
-        Optionally filter by exact keyword matches first.
 
         :param query: The search query string
         :param k: Number of top results to return
         :param _threshold: Similarity threshold
-        :param kwargs: Optional dict of key-value pairs to filter by
         """
-    
-        kwargs = {
-            k: v for k, v in kwargs.items() if isinstance(v, str)
-        }
-        results_list = []        
 
-        # precise match search by keyword value pairs 
-        if kwargs:
-            keyword_matched_ids = self._filter_by_keywords(kwargs)
-            results_list.extend([
-                self.memories[id].model_dump()
-                for id in keyword_matched_ids
-            ])
+        results_list = []
         
         # semantic search
         results = self.retriever.search(query, k)
@@ -249,34 +209,4 @@ class AgenticMemorySystem:
         except Exception:
             return False
         
-        return True
-    
-    def update_by_keywords(
-        self,
-        content: str,
-        **kwargs
-    ) -> bool:
-        """
-        Update memory notes that match all provided keyword-value pairs.
-
-        :param content: New content for the memory notes
-        :param kwargs: Key-value pairs to filter memories by
-        :return: True if at least one memory was updated, else False
-        """
-        if not kwargs:
-            return False
-        
-        matching_ids = self._filter_by_keywords(kwargs)
-        if not matching_ids:
-            self.add_note(
-                content=content,
-                **kwargs
-            )
-        else:
-            matching_id = matching_ids[0]
-            self.update(
-                memory_id=matching_id, 
-                content=content
-            )
-    
         return True

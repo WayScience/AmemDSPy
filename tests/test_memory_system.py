@@ -210,57 +210,6 @@ class TestAgenticMemorySystemSearch:
         """Test that search respects the k parameter."""
         results = populated_memory_system.search("technology", k=2)
         assert len(results) <= 2
-    
-    def test_search_with_keyword_filter(self, keyword_filterable_memory_system):
-        """
-        Test search with keyword filtering.
-        Ensures note matching the filter appears in results
-            before notes that do not match.
-        """
-        memory_system, ids = keyword_filterable_memory_system
-        
-        # Search with filter
-        results = memory_system.search("python", project="project_a")
-        
-        assert len(results) >= 1
-
-        # If project_b exists in results, it should come after project_a
-        id1_index = next(
-            (i for i, r in enumerate(results) \
-             if r['id'] == ids['project_a']), None)
-        id2_index = next(
-            (i for i, r in enumerate(results) \
-             if r['id'] == ids['project_b']), None)
-        
-        if id2_index is not None:
-            assert id1_index is not None
-            assert id1_index < id2_index
-    
-    def test_search_with_multiple_keyword_filters(self, keyword_filterable_memory_system):
-        """Test search with multiple keyword filters."""
-        memory_system, ids = keyword_filterable_memory_system
-        
-        # Filter by both project and author
-        results = memory_system.search(
-            "learning",
-            project="ml_project",
-            author="alice"
-        )
-        
-        assert len(results) >= 1
-        assert any(r['id'] == ids['ml_alice'] for r in results)
-        
-        # If ml_bob exists in results, it should come after ml_alice
-        id1_index = next(
-            (i for i, r in enumerate(results) \
-             if r['id'] == ids['ml_alice']), None)
-        id2_index = next(
-            (i for i, r in enumerate(results) \
-             if r['id'] == ids['ml_bob']), None)
-        
-        if id2_index is not None:
-            assert id1_index is not None
-            assert id1_index < id2_index
 
 
 class TestAgenticMemorySystemPersistence:
